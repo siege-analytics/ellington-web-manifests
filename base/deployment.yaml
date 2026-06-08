@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ellington-web
+  namespace: ellington
+  labels:
+    app: ellington-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ellington-web
+  template:
+    metadata:
+      labels:
+        app: ellington-web
+    spec:
+      containers:
+        - name: web
+          # PLACEHOLDER for sub-1. Sub-2 will replace this with the
+          # Ellington Django image at cyberpower:32000/ellington-web:<tag>.
+          # nginxinc/nginx-unprivileged listens on 8080 by default,
+          # which matches the port sub-2's Daphne will be configured for.
+          image: nginxinc/nginx-unprivileged:stable-alpine
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          envFrom:
+            - configMapRef:
+                name: ellington-web-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
