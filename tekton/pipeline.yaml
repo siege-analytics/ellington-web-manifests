@@ -1,0 +1,75 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ellington-web-build
+  namespace: tekton-pipelines
+spec:
+  description: |
+    Build siege-analytics/ellington-web on push, push the image to the
+    internal registry, and trigger an ArgoCD sync.
+
+    Sub-1 ships this Pipeline as a structural scaffold. The buildx-bake
+    step is a placeholder until sub-2 (Django shell) lands a real
+    Dockerfile in the ellington-web repo. The clone + restart steps
+    are functional today.
+  params:
+    - name: repo-url
+      type: string
+      default: https://github.com/siege-analytics/ellington-web.git
+    - name: revision
+      type: string
+      default: main
+    - name: branch
+      type: string
+      default: main
+    - name: run-id
+      type: string
+      default: manual
+  workspaces:
+    - name: shared-workspace
+      description: Shared workspace for source code across tasks
+  tasks:
+    - name: clone
+      params:
+        - name: repo-url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+      taskRef:
+        name: electinfo-git-clone
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+    - name: build-push
+      runAfter:
+        - clone
+      params:
+        - name: branch
+          value: $(params.branch)
+      # sites-build-bake is the reusable buildx-bake Task already shipped
+      # in the cluster's tekton-pipelines namespace. Sub-2 supplies the
+      # docker-bake.hcl + Dockerfile in ellington-web; until then this
+      # step fails fast, which is the desired behaviour for the substrate
+      # commit (nothing depends on a successful build yet).
+      taskRef:
+        name: sites-build-bake
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+    - name: restart-web
+      runAfter:
+        - build-push
+      params:
+        - name: deployment-name
+          value: ellington-web
+        - name: namespace
+          value: ellington
+        - name: argocd-app
+          value: app-ellington-web
+      taskRef:
+        name: electinfo-restart-deployment
+      when:
+        - input: $(params.branch)
+          operator: in
+          values:
+            - main

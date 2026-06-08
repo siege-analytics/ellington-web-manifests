@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ellington-web-config
+  namespace: ellington
+data:
+  # Stub for sub-1. Sub-2 (Django shell) expands this with the real
+  # Django settings module path + any required ENV the app reads.
+  DJANGO_SETTINGS_MODULE: "ellington_web.settings.prod"
+  ELLINGTON_WEB_VERSION: "0.0.0"

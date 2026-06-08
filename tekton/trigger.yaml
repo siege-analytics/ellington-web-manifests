@@ -1,0 +1,74 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: ellington-web-binding
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: repo-url
+      value: $(body.repository.clone_url)
+    - name: revision
+      value: $(body.head_commit.id)
+    - name: branch
+      value: $(body.ref)
+    - name: run-id
+      value: ellington-web-$(body.head_commit.id)
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: ellington-web-template
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: repo-url
+    - name: revision
+    - name: branch
+    - name: run-id
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: ellington-web-build-
+        namespace: tekton-pipelines
+      spec:
+        pipelineRef:
+          name: ellington-web-build
+        params:
+          - name: repo-url
+            value: $(tt.params.repo-url)
+          - name: revision
+            value: $(tt.params.revision)
+          - name: branch
+            value: $(tt.params.branch)
+          - name: run-id
+            value: $(tt.params.run-id)
+        workspaces:
+          - name: shared-workspace
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 1Gi
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: ellington-web-listener
+  namespace: tekton-pipelines
+spec:
+  triggers:
+    - name: ellington-web-github-push
+      interceptors:
+        - ref:
+            name: "github"
+          params:
+            - name: "eventTypes"
+              value: ["push"]
+      bindings:
+        - ref: ellington-web-binding
+      template:
+        ref: ellington-web-template

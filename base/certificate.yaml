@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ellington-tls
+  namespace: ellington
+spec:
+  secretName: ellington-tls
+  # ClusterIssuer letsencrypt-prod is already deployed cluster-wide.
+  # See ellington-web#1 Fact Sheet for the verification probe.
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: ellington.siegeanalytics.com
+  dnsNames:
+    - ellington.siegeanalytics.com
+  # Default 90-day cert, cert-manager auto-renews at 60 days.
