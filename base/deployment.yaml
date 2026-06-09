@@ -17,26 +17,33 @@ spec:
     spec:
       containers:
         - name: web
-          # PLACEHOLDER for sub-1. Sub-2 will replace this with the
-          # Ellington Django image at cyberpower:32000/ellington-web:<tag>.
-          # nginxinc/nginx-unprivileged listens on 8080 by default,
-          # which matches the port sub-2's Daphne will be configured for.
-          image: nginxinc/nginx-unprivileged:stable-alpine
+          # Image produced by the Tekton sites-build-bake Task from
+          # docker-bake.hcl at the ellington-web repo root. Tag :latest
+          # tracks main; switch to :develop for staging once we have
+          # a separate env.
+          image: cyberpower:32000/ellington-web:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
+          # First-start runs `manage.py migrate` + collectstatic in the
+          # entrypoint; give it room. Probe `/admin/login/` because Django
+          # without a urlpatterns root returns 404 at `/`, but admin URLs
+          # are always live since grappelli + admin are installed.
           readinessProbe:
             httpGet:
-              path: /
+              path: /admin/login/
               port: 8080
-            initialDelaySeconds: 3
-            periodSeconds: 5
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 6
           livenessProbe:
             httpGet:
-              path: /
+              path: /admin/login/
               port: 8080
-            initialDelaySeconds: 10
+            initialDelaySeconds: 120
             periodSeconds: 30
+            failureThreshold: 3
           envFrom:
             - configMapRef:
                 name: ellington-web-config
@@ -44,8 +51,8 @@ spec:
                 name: ellington-web-postgres
           resources:
             requests:
-              cpu: 100m
-              memory: 64Mi
+              cpu: 250m
+              memory: 512Mi
             limits:
-              cpu: 500m
-              memory: 256Mi
+              cpu: "2"
+              memory: 1Gi
