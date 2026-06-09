@@ -1,0 +1,46 @@
+---
+# Idempotent superuser provisioning. Runs `manage.py ensure_superuser`
+# (defined in app/ellington_web/apps/core/management/commands/ — see
+# siege-analytics/ellington-web#15).
+#
+# Apply manually OR let ArgoCD apply it from base/ — either works. On
+# every apply k8s creates a fresh Pod that runs the command and exits.
+# The command is idempotent: existing users get email + flag sync but
+# their password is NEVER reset, so re-applying is safe.
+#
+# Required Secret `ellington-web-admin` (operator-applied, NOT committed
+# — see base/secret-admin.yaml.example for shape, README §6 for recipe).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ellington-web-ensure-superuser
+  namespace: ellington
+  annotations:
+    # Re-runnable: bump this annotation (or just delete + reapply) to
+    # force ArgoCD to recreate the Job after the initial apply.
+    ellington-web-manifests/run-id: "1"
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ensure-superuser
+          image: localhost:32000/ellington-web:latest
+          imagePullPolicy: Always
+          command: ["python3", "manage.py", "ensure_superuser"]
+          envFrom:
+            - configMapRef:
+                name: ellington-web-config
+            - secretRef:
+                name: ellington-web-postgres
+            - secretRef:
+                name: ellington-web-admin
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
