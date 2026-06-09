@@ -20,3 +20,6 @@ data:
   SQL_PORT: "5432"
   SQL_DATABASE: "ellington_web"
   SQL_USER: "ellington_web"
+  # Django 4.0+ rejects POSTs whose Origin host isn't here.
+  # Comma-separated, scheme-included.
+  CSRF_TRUSTED_ORIGINS: "https://ellington.siegeanalytics.com"
