@@ -1,0 +1,25 @@
+---
+# Tekton EventListener webhook entrypoint.
+# Hostname `*.webhook.elect.info` resolves to the cluster via DNS wildcard
+# (Dreamhost A record). Sub-1's outpost gate is NOT in front — the github
+# ClusterInterceptor (configured in tekton/trigger.yaml) is what filters
+# valid push events.
+#
+# Hardening follow-up (HMAC validation + CEL repo-scope filter): #6.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ellington-web-webhook
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`ellington-web.webhook.elect.info`)
+      services:
+        - name: el-ellington-web-listener
+          namespace: tekton-pipelines
+          port: 8080
+  tls:
+    secretName: ellington-web-webhook-electinfo-tls

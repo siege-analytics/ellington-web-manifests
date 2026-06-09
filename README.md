@@ -75,7 +75,25 @@ kubectl apply -f tekton/
 
 ### 4. Wire the GitHub webhook
 
-Once `ellington-web-listener` is running, expose it via an IngressRoute (e.g. `tekton.siegeanalytics.com`) and register the URL as a GitHub webhook on the `ellington-web` repo: `Settings → Webhooks → Add`, Content-type: application/json, events: `push`.
+The `tekton/` manifests (Pipeline, EventListener, TriggerBinding, TriggerTemplate, IngressRoute, Certificate) live outside ArgoCD's watch. Apply them once:
+
+```bash
+kubectl apply -f tekton/
+```
+
+This brings up:
+- `el-ellington-web-listener` service in `tekton-pipelines` ns
+- `ellington-web-webhook` IngressRoute in `traefik` ns at `https://ellington-web.webhook.elect.info` (DNS wildcard `*.webhook.elect.info` already resolves to the cluster)
+- cert-manager Certificate `ellington-web-webhook-electinfo-tls` (LetsEncrypt prod)
+
+Then register the webhook on GitHub: `siege-analytics/ellington-web → Settings → Webhooks → Add webhook`:
+- **Payload URL:** `https://ellington-web.webhook.elect.info`
+- **Content-Type:** `application/json`
+- **SSL verification:** Enable
+- **Events:** Just the push event
+- **Secret:** _(none yet — see [#6](https://github.com/siege-analytics/ellington-web-manifests/issues/6) for HMAC hardening sweep)_
+
+Once registered, pushing to `main` on `siege-analytics/ellington-web` fires a `PipelineRun` visible in `kubectl -n tekton-pipelines get pr`.
 
 ### 5. Provision the PostGIS database (sub-2c)
 

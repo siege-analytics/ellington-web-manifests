@@ -1,0 +1,14 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ellington-web-webhook-electinfo-tls
+  namespace: traefik
+spec:
+  commonName: ellington-web.webhook.elect.info
+  dnsNames:
+    - ellington-web.webhook.elect.info
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  secretName: ellington-web-webhook-electinfo-tls
