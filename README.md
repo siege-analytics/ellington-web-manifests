@@ -77,6 +77,39 @@ kubectl apply -f tekton/
 
 Once `ellington-web-listener` is running, expose it via an IngressRoute (e.g. `tekton.siegeanalytics.com`) and register the URL as a GitHub webhook on the `ellington-web` repo: `Settings → Webhooks → Add`, Content-type: application/json, events: `push`.
 
+### 5. Provision the PostGIS database (sub-2c)
+
+Ellington uses a dedicated DB on the cluster's existing `default/db-postgis-master` instance — same pattern as `authentik`, `cms`, `electinfo`, `nominatim` etc.
+
+```bash
+# Generate a strong password
+PW=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')
+echo "Save this to a password manager BEFORE running the next steps: $PW"
+
+# Create role + DB + extension
+POD=db-postgis-master-0
+kubectl -n default exec $POD -c postgis -- psql -U postgres -c \
+  "CREATE ROLE ellington_web WITH LOGIN PASSWORD '$PW';"
+kubectl -n default exec $POD -c postgis -- psql -U postgres -c \
+  "CREATE DATABASE ellington_web OWNER ellington_web;"
+kubectl -n default exec $POD -c postgis -- psql -U postgres -d ellington_web -c \
+  "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# Apply the cluster Secret consumed by base/deployment.yaml
+kubectl -n ellington create secret generic ellington-web-postgres \
+  --from-literal=SQL_PASSWORD="$PW"
+
+# Verify
+kubectl -n default exec $POD -c postgis -- env PGPASSWORD="$PW" \
+  psql -U ellington_web -d ellington_web -h localhost \
+  -tAc 'SELECT current_user, current_database(), postgis_version();'
+# expected: ellington_web|ellington_web|3.x ...
+```
+
+The Secret shape is documented in `base/secret-postgres.yaml.example` (committed as documentation only — never put the live password in git). The Deployment's `envFrom` picks up `SQL_PASSWORD` from the Secret alongside the non-secret `SQL_*` keys from `base/configmap.yaml`.
+
+To rotate the password: regenerate, `ALTER ROLE ellington_web WITH PASSWORD '<new>';`, then `kubectl create secret generic ellington-web-postgres --from-literal=SQL_PASSWORD='<new>' --dry-run=client -o yaml | kubectl apply -f -`.
+
 ## Day-to-day
 
 After bootstrap, all changes flow through git → ArgoCD:

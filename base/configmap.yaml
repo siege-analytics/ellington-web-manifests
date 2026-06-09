@@ -4,7 +4,14 @@ metadata:
   name: ellington-web-config
   namespace: ellington
 data:
-  # Stub for sub-1. Sub-2 (Django shell) expands this with the real
-  # Django settings module path + any required ENV the app reads.
-  DJANGO_SETTINGS_MODULE: "ellington_web.settings.prod"
+  # Non-secret env consumed by Django (see app/ellington_web/ellington_web/settings/django_settings.py).
+  # SQL_PASSWORD is kept separately in the ellington-web-postgres Secret.
+  DJANGO_SETTINGS_MODULE: "ellington_web.settings"
   ELLINGTON_WEB_VERSION: "0.0.0"
+  DEBUG: "0"
+  AUTHENTIK_HEADER_TRUST: "1"
+  SQL_ENGINE: "django.contrib.gis.db.backends.postgis"
+  SQL_HOST: "db-postgis-master.default.svc.cluster.local"
+  SQL_PORT: "5432"
+  SQL_DATABASE: "ellington_web"
+  SQL_USER: "ellington_web"
