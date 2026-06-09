@@ -9,14 +9,11 @@ spec:
   routes:
     - kind: Rule
       match: Host(`ellington.siegeanalytics.com`)
-      # Cluster convention: every public IngressRoute routes through
-      # authentik-forwardauth (see electinfo/* IngressRoutes for the
-      # canonical pattern). Authentik must have an Application +
-      # Provider configured for this hostname before traffic can flow;
-      # see README.md "Authentik configuration" for the operator step.
-      middlewares:
-        - name: authentik-forwardauth
-          namespace: traefik
+      # Authentik forwardauth intentionally NOT applied here (see #14):
+      # web traffic reaches Django without an SSO gate. The Authentik
+      # Application + ProxyProvider + Outpost binding remain in place,
+      # so this is reversible by a one-line restore of the middlewares
+      # block; nothing in Authentik was destroyed.
       priority: 10
       services:
         - kind: Service

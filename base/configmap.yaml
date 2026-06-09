@@ -9,7 +9,12 @@ data:
   DJANGO_SETTINGS_MODULE: "ellington_web.settings"
   ELLINGTON_WEB_VERSION: "0.0.0"
   DEBUG: "0"
-  AUTHENTIK_HEADER_TRUST: "1"
+  # With the authentik-forwardauth middleware removed from
+  # base/ingressroute.yaml (#14), no Authentik headers reach the
+  # upstream. Setting this to "1" while the gate is off would let any
+  # external client spoof X-authentik-username and authenticate as
+  # anyone. sub-2b's middleware no-ops cleanly when this is "0".
+  AUTHENTIK_HEADER_TRUST: "0"
   SQL_ENGINE: "django.contrib.gis.db.backends.postgis"
   SQL_HOST: "db-postgis-master.default.svc.cluster.local"
   SQL_PORT: "5432"
