@@ -21,7 +21,7 @@ spec:
           # docker-bake.hcl at the ellington-web repo root. Tag :latest
           # tracks main; switch to :develop for staging once we have
           # a separate env.
-          image: cyberpower:32000/ellington-web:latest
+          image: localhost:32000/ellington-web:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
