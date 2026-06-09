@@ -128,6 +128,41 @@ The Secret shape is documented in `base/secret-postgres.yaml.example` (committed
 
 To rotate the password: regenerate, `ALTER ROLE ellington_web WITH PASSWORD '<new>';`, then `kubectl create secret generic ellington-web-postgres --from-literal=SQL_PASSWORD='<new>' --dry-run=client -o yaml | kubectl apply -f -`.
 
+### 6. Provision the Django superuser
+
+Bootstrap pattern for committable scripts that interact with operator-applied k8s Secrets. The shape (idempotent management command + envFrom-mounted Secret + k8s Job) is reusable for any future bootstrap operation — see `ellington-web#15` for the command, this section for the operator recipe.
+
+```bash
+# Generate a strong password (or pick one)
+PW=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')
+echo "Save this to a password manager BEFORE running: $PW"
+
+# Operator-applied Secret consumed by base/job-ensure-superuser.yaml
+kubectl -n ellington create secret generic ellington-web-admin \
+  --from-literal=ADMIN_USERNAME='dheeraj' \
+  --from-literal=ADMIN_EMAIL='dheeraj@elect.info' \
+  --from-literal=ADMIN_PASSWORD="$PW"
+
+# After the next ArgoCD sync, base/job-ensure-superuser.yaml will run.
+# Or apply manually now:
+kubectl apply -f base/job-ensure-superuser.yaml
+
+# Verify (the Job auto-cleans after 600s):
+kubectl -n ellington logs job/ellington-web-ensure-superuser
+# expected: "created superuser dheeraj"
+```
+
+The Job's command (`ellington-web#15`) is **idempotent**: existing users get email + flag sync, but the password is **never** reset by the Job. To rotate, run `manage.py changepassword` against a running web pod:
+
+```bash
+kubectl -n ellington exec -it deploy/ellington-web -- python3 manage.py changepassword dheeraj
+```
+
+To replay the Job with a fresh container (e.g. after manifest changes): bump the `ellington-web-manifests/run-id` annotation in `base/job-ensure-superuser.yaml`, or `kubectl -n ellington delete job ellington-web-ensure-superuser` then `kubectl apply -f base/job-ensure-superuser.yaml`.
+
+The Secret shape is documented in `base/secret-admin.yaml.example` (placeholder values only — never holds a live password).
+
+
 ## Day-to-day
 
 After bootstrap, all changes flow through git → ArgoCD:
