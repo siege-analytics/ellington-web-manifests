@@ -40,6 +40,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: ellington-web-config
+            - secretRef:
+                name: ellington-web-postgres
           resources:
             requests:
               cpu: 100m
