@@ -69,7 +69,14 @@ spec:
       taskRef:
         name: electinfo-restart-deployment
       when:
+        # Triggers send branch as the full git ref (``refs/heads/main``),
+        # not the short name (``main``). Earlier versions of this file
+        # only matched the short name, so restart-web was silently
+        # skipped on every main push since the pipeline was authored.
+        # Both forms accepted defensively in case a future trigger
+        # passes the short name.
         - input: $(params.branch)
           operator: in
           values:
             - main
+            - refs/heads/main
