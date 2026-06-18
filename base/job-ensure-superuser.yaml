@@ -27,7 +27,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: ensure-superuser
-          image: localhost:32000/ellington-web:latest
+          image: localhost:32000/ellington-web:develop
           imagePullPolicy: Always
           command: ["python3", "manage.py", "ensure_superuser"]
           envFrom:

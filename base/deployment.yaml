@@ -18,10 +18,15 @@ spec:
       containers:
         - name: web
           # Image produced by the Tekton sites-build-bake Task from
-          # docker-bake.hcl at the ellington-web repo root. Tag :latest
-          # tracks main; switch to :develop for staging once we have
-          # a separate env.
-          image: localhost:32000/ellington-web:latest
+          # docker-bake.hcl at the ellington-web repo root. The
+          # production deployment tracks :develop: that's the trunk
+          # we ship from (main is downstream of develop per project
+          # workflow). Pinning :develop means each rollout pulls the
+          # newest build for that branch. See ellington-web#75 — when
+          # this was :latest, the Tekton build pushed :develop only
+          # for develop-branch refs, leaving :latest stale and
+          # production running months-old code.
+          image: localhost:32000/ellington-web:develop
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
