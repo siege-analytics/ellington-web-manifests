@@ -73,3 +73,25 @@ spec:
           operator: in
           values:
             - main
+    - name: restart-worker
+      # Worker image is built by the same buildx-bake step (see
+      # docker-bake.hcl's default group post-#89), so it lands in the
+      # registry alongside the web image. Mirror the restart-web step
+      # so the worker pod also rolls on main pushes; otherwise the
+      # web image floats while the worker stays months behind.
+      runAfter:
+        - build-push
+      params:
+        - name: deployment-name
+          value: ellington-web-worker
+        - name: namespace
+          value: ellington
+        - name: argocd-app
+          value: app-ellington-web
+      taskRef:
+        name: electinfo-restart-deployment
+      when:
+        - input: $(params.branch)
+          operator: in
+          values:
+            - main
