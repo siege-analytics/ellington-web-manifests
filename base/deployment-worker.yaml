@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ellington-web-worker
+  namespace: ellington
+  labels:
+    app: ellington-web-worker
+spec:
+  # Single worker replica for now. omr-leadsheet jobs are CPU-bound
+  # (Audiveris + MuseScore), so horizontal scaling adds little until
+  # the queue depth justifies it. Bump when ChartImport throughput
+  # outgrows a single pod.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ellington-web-worker
+  strategy:
+    # Workers must NOT have two replicas alive during a rollout — a
+    # second Celery process on the same queue can race the first on a
+    # ChartImport row (#80 lifecycle FSM expects single-writer). Use
+    # Recreate so the old pod terminates before the new one starts.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ellington-web-worker
+    spec:
+      containers:
+        - name: worker
+          # Built by docker-bake.hcl's ellington-web-worker target
+          # (see ellington-web#89). Pinned to :develop for the same
+          # reason as the web deployment (#75) — develop is the
+          # project's release trunk.
+          image: localhost:32000/ellington-web-worker:develop
+          imagePullPolicy: Always
+          # Override the web entrypoint's CMD. The image's default CMD
+          # already runs `celery worker -Q omr-leadsheet,celery -c 1`
+          # but pin it here so manifest changes don't depend on image
+          # CMD changes for queue-routing.
+          command: ["celery"]
+          args:
+            - "-A"
+            - "ellington_web"
+            - "worker"
+            - "-Q"
+            - "omr-leadsheet,celery"
+            - "--concurrency=1"
+            - "--loglevel=info"
+          # The web entrypoint runs migrate + collectstatic before
+          # exec'ing the CMD. Workers don't need either — they share
+          # the same DB the web pod migrates. Skip via env flag the
+          # entrypoint honors (kept simple — operator sets this if the
+          # web pod's migrations are reliable; otherwise leave unset
+          # and accept the duplicate migrate-noop).
+          env:
+            - name: ELLINGTON_SKIP_MIGRATIONS
+              value: "1"
+            - name: ELLINGTON_SKIP_COLLECTSTATIC
+              value: "1"
+          envFrom:
+            - configMapRef:
+                name: ellington-web-config
+            - secretRef:
+                name: ellington-web-postgres
+          # Audiveris + MuseScore both spin up JVMs / Qt processes that
+          # baseline ~400 MB resident. Request enough to avoid OOM on
+          # the first PDF; cap below the 8 GB node memory budget so
+          # other pods on the same node stay alive under load.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          # No liveness/readiness probe — Celery workers don't expose
+          # HTTP. If we want crash-loop detection beyond k8s's default
+          # exit-code restart, add a sidecar that polls broker stats.
