@@ -61,20 +61,57 @@ spec:
                 limits:
                   cpu: 500m
                   memory: 256Mi
+            - name: resolve-engine-rules-tag
+              # Looks up the lexically-latest engine-rules-v* tag from
+              # the plugin repo's GitHub Releases and writes it to a
+              # shared file the sync container reads. Sort -V handles
+              # semver correctly; the plugin agent's release script
+              # uses zero-padded patches so plain sort -V is enough.
+              # Unauthenticated GitHub API allows 60 req/h per IP;
+              # we fire 1/h, comfortable headroom. See ellington-web#157.
+              image: alpine:3.20
+              command:
+                - sh
+                - -ec
+                - |
+                  apk add --no-cache curl jq >/dev/null
+                  curl -fsSL \
+                    https://api.github.com/repos/siege-analytics/musescore4-chord-library-plugin/releases \
+                    | jq -r '.[] | select(.tag_name | startswith("engine-rules-v")) | .tag_name' \
+                    | sort -V | tail -1 > /work/engine-rules-tag
+                  echo "Resolved engine-rules release: $(cat /work/engine-rules-tag)"
+              volumeMounts:
+                - name: plugin-checkout
+                  mountPath: /work
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
           containers:
             - name: sync
               # Same image the web pod runs — already has Django + the
-              # sync_plugin_catalogs management command. Pinned to
-              # :develop for the same reason as the web Deployment
-              # (#75): develop is the project's release trunk.
+              # sync_plugin_catalogs and sync_engine_rules management
+              # commands. Pinned to :develop for the same reason as
+              # the web Deployment (#75): develop is the project's
+              # release trunk.
               image: localhost:32000/ellington-web:develop
               imagePullPolicy: Always
+              # Two sync passes per run: catalog (masters/styles/idioms)
+              # and engine_rules (firing-spec rules per release tag).
+              # Sequential because they share the DB; if catalog fails
+              # we still try engine_rules because they're independent
+              # tables. Final exit is OR of the two.
               command:
-                - python3
-                - /usr/src/app/ellington_web/manage.py
-                - sync_plugin_catalogs
-                - --plugin-data-dir
-                - /work/plugin/data
+                - sh
+                - -ec
+                - |
+                  python3 /usr/src/app/ellington_web/manage.py \
+                    sync_plugin_catalogs --plugin-data-dir /work/plugin/data
+                  python3 /usr/src/app/ellington_web/manage.py \
+                    sync_engine_rules --release-tag "$(cat /work/engine-rules-tag)"
               env:
                 # Skip migrations + collectstatic — the web pod handles
                 # those; the sync job just needs DB read/write.
