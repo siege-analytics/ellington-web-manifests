@@ -23,3 +23,17 @@ data:
   # Django 4.0+ rejects POSTs whose Origin host isn't here.
   # Comma-separated, scheme-included.
   CSRF_TRUSTED_ORIGINS: "https://ellington.siegeanalytics.com"
+  # Email — DreamHost SMTP per ellington-web #101. Password lives in
+  # the ellington-web-email Secret (separate file because rotation has
+  # different cadence + risk profile than other env). Sender mailbox
+  # is shared with resume-generator product; rotating the password
+  # requires updating BOTH this product's Secret and resume-generator's
+  # email Secret in the resume-generator namespace, then rolling-restart
+  # both Deployments.
+  EMAIL_BACKEND: "django.core.mail.backends.smtp.EmailBackend"
+  EMAIL_HOST: "smtp.dreamhost.com"
+  EMAIL_PORT: "587"
+  EMAIL_USE_TLS: "1"
+  EMAIL_HOST_USER: "dheeraj@dheerajchand.com"
+  FROM_EMAIL: "dheeraj@dheerajchand.com"
+  REPLY_TO_EMAIL: "dheeraj.chand@gmail.com"

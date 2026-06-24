@@ -54,6 +54,8 @@ spec:
                 name: ellington-web-config
             - secretRef:
                 name: ellington-web-postgres
+            - secretRef:
+                name: ellington-web-email
           resources:
             requests:
               cpu: 250m
