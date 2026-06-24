@@ -1,0 +1,58 @@
+---
+# Django `manage.py migrate` run as an ArgoCD PreSync hook so the
+# prod DB schema stays current independent of the web pod's rollout
+# success. See ellington-web#171 for the originating incident: 17
+# migrations (including engine_rules.0001/0002) sat unapplied for
+# days because the new ReplicaSet that would have run them on
+# entrypoint was stuck on a missing Secret (#149-class block).
+#
+# Hook semantics:
+# - PreSync: runs BEFORE any other resource changes land in the Sync
+# - HookSucceeded: successful Job is deleted after; failed stays for
+#   debugging
+# - Job is annotated `force-recreate-on-hash` (sync-wave 0); each Sync
+#   spawns a fresh Pod with the latest :develop image, so this Job
+#   always runs the migrations from the same code that's about to roll
+#
+# Required Secret `ellington-web-postgres` (operator-applied — see
+# base/secret-postgres.yaml.example).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # generateName instead of name — ArgoCD's PreSync hook semantics
+  # re-create a Job on every Sync; a fixed name would conflict on
+  # subsequent syncs unless the prior Job was deleted (which is what
+  # HookSucceeded delete-policy does, but generateName is the more
+  # idiomatic match for a hook that should always spawn a fresh Pod).
+  generateName: ellington-web-migrate-
+  namespace: ellington
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  # Failed migrations should stay visible — `activeDeadlineSeconds`
+  # protects against a runaway data migration stalling the Sync; bump
+  # this on a release that legitimately needs longer.
+  activeDeadlineSeconds: 1200
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: localhost:32000/ellington-web:develop
+          imagePullPolicy: Always
+          command: ["python3", "/usr/src/app/ellington_web/manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: ellington-web-config
+            - secretRef:
+                name: ellington-web-postgres
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
