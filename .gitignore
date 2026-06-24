@@ -1,0 +1,7 @@
+# Populated copies of the *.yaml.example Secret templates — these
+# carry real credentials and must never be committed. Apply them with
+# ``kubectl apply -f base/secret-*.yaml`` from a workstation, not the
+# repo.
+base/secret-postgres.yaml
+base/secret-admin.yaml
+base/secret-email.yaml
