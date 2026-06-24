@@ -1,0 +1,99 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sync-plugin-catalogs
+  namespace: ellington
+  labels:
+    app: ellington-web
+    component: plugin-catalog-sync
+spec:
+  # Hourly at :17, matching the existing electinfo cron cadence on
+  # cyberpower so the cluster's "things-fire-at-:17" rhythm is
+  # consistent across namespaces. Plugin-agent typically merges
+  # 3-5 PRs/hour during distillation pushes — hourly is the BRIDGE
+  # cadence per ellington-web#58 option B; option E (ArgoCD PreSync)
+  # is the proper fix, lands separately.
+  schedule: "17 * * * *"
+  # Don't queue overlapping runs — two `sync_plugin_catalogs`
+  # invocations can race the masters/styles/idioms upsert path.
+  concurrencyPolicy: Forbid
+  # Keep just enough job history for observability; older runs are
+  # safe to drop because the next run is always idempotent.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: ellington-web
+            component: plugin-catalog-sync
+        spec:
+          restartPolicy: OnFailure
+          # Plugin repo is public; clone over HTTPS without auth. The
+          # emptyDir is wiped between runs which is fine — clone is
+          # ~50 MB and takes <10s. No PVC needed at this cadence.
+          volumes:
+            - name: plugin-checkout
+              emptyDir: {}
+          initContainers:
+            - name: clone-plugin
+              image: alpine/git:latest
+              command:
+                - git
+                - clone
+                - --branch
+                - develop
+                - --depth
+                - "1"
+                - https://github.com/siege-analytics/musescore4-chord-library-plugin.git
+                - /work
+              volumeMounts:
+                - name: plugin-checkout
+                  mountPath: /work
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+          containers:
+            - name: sync
+              # Same image the web pod runs — already has Django + the
+              # sync_plugin_catalogs management command. Pinned to
+              # :develop for the same reason as the web Deployment
+              # (#75): develop is the project's release trunk.
+              image: localhost:32000/ellington-web:develop
+              imagePullPolicy: Always
+              command:
+                - python3
+                - /usr/src/app/ellington_web/manage.py
+                - sync_plugin_catalogs
+                - --plugin-data-dir
+                - /work/plugin/data
+              env:
+                # Skip migrations + collectstatic — the web pod handles
+                # those; the sync job just needs DB read/write.
+                - name: ELLINGTON_SKIP_MIGRATIONS
+                  value: "1"
+                - name: ELLINGTON_SKIP_COLLECTSTATIC
+                  value: "1"
+              envFrom:
+                - configMapRef:
+                    name: ellington-web-config
+                - secretRef:
+                    name: ellington-web-postgres
+              volumeMounts:
+                - name: plugin-checkout
+                  mountPath: /work
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
